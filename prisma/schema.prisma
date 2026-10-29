@@ -1,0 +1,979 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  ANALYST
+  EDITOR
+  VIEWER
+  BILLING_MANAGER
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum Verification {
+  VERIFIED
+  PARTIALLY_VERIFIED
+  UNVERIFIED
+  INFERENCE
+  DISPUTED
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  name String
+  passwordHash String
+  emailVerifiedAt DateTime?
+  platformAdmin Boolean @default(false)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  tokens VerificationToken[]
+  memberships Membership[]
+  oauthAccounts OAuthAccount[]
+  mfa MFAFactor?
+  recoveryCodes RecoveryCode[]
+  loginChallenges LoginChallenge[]
+  projectMemberships ProjectMember[]
+  bookmarks Bookmark[]
+  notificationReads NotificationRead[]
+  notificationPreferences NotificationPreference[]
+}
+
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  label String @default("Browser session")
+  lastSeenAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model VerificationToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  purpose String
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, purpose])
+}
+
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  slug String @unique
+  industry String?
+  website String?
+  timezone String @default("UTC")
+  credits Int @default(100)
+  reservedCredits Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  memberships Membership[]
+  invitations Invitation[]
+  projects Project[]
+  subscription Subscription?
+  ledger CreditLedger[]
+  audit AuditLog[]
+  notifications Notification[]
+  apiKeys ApiKey[]
+  paymentEvents PaymentEvent[]
+  features Feature[]
+  invoices Invoice[]
+  creditPurchases CreditPurchase[]
+  usageEvents UsageEvent[]
+  metrics Metric[]
+  webhookEndpoints WebhookEndpoint[]
+  integrations Integration[]
+}
+
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  role Role @default(VIEWER)
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  email String
+  role Role
+  tokenHash String @unique
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@index([organizationId, email])
+}
+
+model Plan {
+  id String @id
+  name String
+  monthlyPriceCents Int
+  annualPriceCents Int
+  monthlyCredits Int
+  projectLimit Int
+  seatLimit Int
+  monitorLimit Int
+  stripeMonthlyPriceId String? @unique
+  stripeAnnualPriceId String? @unique
+  enabled Boolean @default(true)
+  trialDays Int @default(0)
+  subscriptions Subscription[]
+  entitlements Entitlement[]
+}
+
+model Subscription {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @unique @db.Uuid
+  planId String @default("free")
+  status String @default("active")
+  stripeCustomerId String? @unique
+  stripeSubscriptionId String? @unique
+  currentPeriodEnd DateTime?
+  graceEndsAt DateTime?
+  trialStartedAt DateTime?
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+}
+
+model CreditLedger {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  idempotencyKey String @unique
+  kind String
+  amount Int
+  balanceAfter Int
+  referenceId String?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  usageEvent UsageEvent?
+  @@unique([organizationId, id])
+  @@index([organizationId, createdAt])
+}
+
+model Project {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  description String
+  website String?
+  industry String?
+  targetMarket String?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  runs ResearchRun[]
+  competitors Competitor[]
+  sources Source[]
+  findings Finding[]
+  reports Report[]
+  threads ChatThread[]
+  monitors Monitor[]
+  comments Comment[]
+  members ProjectMember[]
+  bookmarks Bookmark[]
+  embeddings EmbeddingRecord[]
+  comparisons Comparison[]
+  competitorLinks ProjectCompetitor[]
+  @@unique([organizationId, id])
+  @@index([organizationId, deletedAt, createdAt])
+}
+
+model ResearchRun {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  idempotencyKey String
+  status RunStatus @default(QUEUED)
+  options Json
+  reservedCredits Int
+  consumedCredits Int @default(0)
+  providerTokens Int @default(0)
+  error String?
+  cancelRequested Boolean @default(false)
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  finishedAt DateTime?
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  stages ResearchStage[]
+  sources Source[]
+  findings Finding[]
+  reports Report[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, projectId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ResearchStage {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  runId String @db.Uuid
+  name String
+  status RunStatus @default(QUEUED)
+  attempts Int @default(0)
+  output Json?
+  error String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  run ResearchRun @relation(fields: [organizationId, runId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, runId, name])
+}
+
+model Competitor {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  name String
+  domain String
+  classification String @default("UNVERIFIED")
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  products CompetitorProduct[]
+  pricing PricingPlan[]
+  features CompetitorFeature[]
+  projectLinks ProjectCompetitor[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, projectId, domain])
+}
+
+model CompetitorProduct {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  competitorId String @db.Uuid
+  name String
+  description String?
+  sourceUrl String
+  retrievedAt DateTime @default(now())
+  competitor Competitor @relation(fields: [organizationId, competitorId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, competitorId])
+}
+
+model PricingPlan {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  competitorId String @db.Uuid
+  name String
+  amount Decimal? @db.Decimal(12, 2)
+  currency String?
+  interval String?
+  sourceUrl String
+  retrievedAt DateTime @default(now())
+  competitor Competitor @relation(fields: [organizationId, competitorId], references: [organizationId, id], onDelete: Cascade)
+  history PricingHistory[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, competitorId, name])
+  @@index([organizationId, competitorId])
+}
+
+model Source {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  runId String @db.Uuid
+  url String
+  title String
+  category String @default("WEB")
+  contentHash String
+  text String
+  retrievedAt DateTime @default(now())
+  publishedAt DateTime?
+  verification Verification @default(UNVERIFIED)
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  run ResearchRun @relation(fields: [organizationId, runId], references: [organizationId, id], onDelete: Cascade)
+  evidence FindingEvidence[]
+  embeddings EmbeddingRecord[]
+  competitorFeatures CompetitorFeature[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, runId, url])
+  @@index([organizationId, projectId, retrievedAt])
+}
+
+model Finding {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  runId String @db.Uuid
+  category String
+  claim String
+  verification Verification @default(UNVERIFIED)
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  run ResearchRun @relation(fields: [organizationId, runId], references: [organizationId, id], onDelete: Cascade)
+  evidence FindingEvidence[]
+  swot SwotItem?
+  opportunity MarketOpportunity?
+  @@unique([organizationId, id])
+  @@index([organizationId, projectId, category])
+}
+
+model FindingEvidence {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  findingId String @db.Uuid
+  sourceId String @db.Uuid
+  quotation String
+  finding Finding @relation(fields: [organizationId, findingId], references: [organizationId, id], onDelete: Cascade)
+  source Source @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, findingId, sourceId])
+}
+
+model Report {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  runId String @db.Uuid
+  title String
+  content Json
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  run ResearchRun @relation(fields: [organizationId, runId], references: [organizationId, id], onDelete: Cascade)
+  shareLinks ShareLink[]
+  exports ReportExport[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, runId])
+  @@index([organizationId, projectId])
+}
+
+model ChatThread {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  title String
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  messages ChatMessage[]
+  @@unique([organizationId, id])
+  @@index([organizationId, projectId])
+}
+
+model ChatMessage {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  threadId String @db.Uuid
+  role String
+  content String
+  citations Json?
+  createdAt DateTime @default(now())
+  thread ChatThread @relation(fields: [organizationId, threadId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, threadId, createdAt])
+}
+
+model Monitor {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  url String
+  everyHours Int @default(24)
+  enabled Boolean @default(true)
+  lastHash String?
+  lastText String?
+  lastCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  runs MonitorRun[]
+  changes ChangeEvent[]
+  snapshots SourceSnapshot[]
+  alertRules AlertRule[]
+  @@unique([organizationId, id])
+  @@index([organizationId, projectId])
+}
+
+model MonitorRun {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  monitorId String @db.Uuid
+  contentHash String?
+  error String?
+  createdAt DateTime @default(now())
+  monitor Monitor @relation(fields: [organizationId, monitorId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, monitorId, createdAt])
+}
+
+model ChangeEvent {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  monitorId String @db.Uuid
+  previousHash String
+  currentHash String
+  previousText String
+  currentText String
+  createdAt DateTime @default(now())
+  monitor Monitor @relation(fields: [organizationId, monitorId], references: [organizationId, id], onDelete: Cascade)
+  alerts Alert[]
+  @@unique([organizationId, id])
+  @@unique([organizationId, monitorId, previousHash, currentHash])
+}
+
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  title String
+  body String
+  readAt DateTime?
+  dispatchPlannedAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reads NotificationRead[]
+  deliveries NotificationDelivery[]
+  @@unique([organizationId, id])
+  @@index([organizationId, createdAt])
+}
+
+model Comment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  authorId String @db.Uuid
+  body String
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, projectId, createdAt])
+}
+
+model ApiKey {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  prefix String
+  keyHash String @unique
+  scopes String[]
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@index([organizationId])
+}
+
+model WebhookEndpoint {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  url String
+  encryptedSecret String
+  enabled Boolean @default(true)
+  events String[]
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+  @@unique([organizationId, id])
+}
+
+model WebhookDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  endpointId String @db.Uuid
+  eventId String
+  payload Json
+  attempts Int @default(0)
+  status String @default("pending")
+  nextAttemptAt DateTime @default(now())
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  endpoint WebhookEndpoint @relation(fields: [organizationId, endpointId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, endpointId, eventId])
+  @@index([status, nextAttemptAt])
+}
+
+model Integration {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  provider String
+  encryptedCredentials String
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, provider])
+}
+
+model PaymentEvent {
+  id String @id
+  organizationId String @db.Uuid
+  type String
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@index([organizationId, createdAt])
+}
+
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  actorId String
+  action String
+  resourceId String?
+  details Json?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@index([organizationId, createdAt])
+}
+
+model EmailDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  recipient String
+  subject String
+  encryptedBody String
+  idempotencyKey String? @unique
+  attempts Int @default(0)
+  deliveredAt DateTime?
+  nextAttemptAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([deliveredAt, nextAttemptAt])
+}
+
+model OAuthAccount {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  provider String
+  providerUserId String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+}
+
+model OAuthState {
+  id String @id @default(uuid()) @db.Uuid
+  stateHash String @unique
+  nonceHash String
+  encryptedVerifier String
+  linkUserId String? @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model MFAFactor {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @unique @db.Uuid
+  encryptedSecret String
+  enabledAt DateTime?
+  lastUsedStep BigInt @default(0)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RecoveryCode {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  codeHash String @unique
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model LoginChallenge {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  attempts Int @default(0)
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([expiresAt])
+}
+
+model ProjectMember {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  userId String @db.Uuid
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, projectId, userId])
+}
+
+model Bookmark {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  userId String @db.Uuid
+  note String
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([organizationId, projectId, userId])
+}
+
+model ShareLink {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  reportId String @db.Uuid
+  tokenHash String @unique
+  passwordHash String?
+  audience String @default("WORKSPACE")
+  createdBy String @db.Uuid
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  report Report @relation(fields: [organizationId, reportId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, reportId])
+}
+
+model FeatureFlag {
+  id String @id
+  description String
+  enabled Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSetting {
+  id String @id
+  value Json
+  updatedAt DateTime @updatedAt
+}
+
+model ApiUsage {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  apiKeyId String @db.Uuid
+  endpoint String
+  createdAt DateTime @default(now())
+  @@index([organizationId, apiKeyId, createdAt])
+}
+
+model EmbeddingRecord {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  sourceId String @db.Uuid
+  model String
+  contentHash String
+  content String
+  vector Unsupported("vector(768)")?
+  createdAt DateTime @default(now())
+  source Source @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Cascade)
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, sourceId, model])
+  @@index([organizationId, projectId])
+}
+
+model ProviderUsage {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String? @db.Uuid
+  runId String? @db.Uuid
+  provider String
+  model String
+  promptVersion String
+  inputTokens Int @default(0)
+  outputTokens Int @default(0)
+  totalTokens Int @default(0)
+  estimatedCostMicros BigInt?
+  status String
+  durationMs Int
+  createdAt DateTime @default(now())
+  @@index([organizationId, createdAt])
+  @@index([provider, model, createdAt])
+}
+
+model PlatformAuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  actorId String @db.Uuid
+  action String
+  resourceId String?
+  details Json?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
+model NotificationRead {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  notificationId String @db.Uuid
+  userId String @db.Uuid
+  readAt DateTime @default(now())
+  notification Notification @relation(fields: [organizationId, notificationId], references: [organizationId, id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([notificationId, userId])
+}
+
+model NotificationPreference {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  emailEnabled Boolean @default(false)
+  frequency String @default("INSTANT")
+  lastDigestAt DateTime @default(now())
+  nextDigestAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, userId])
+}
+
+model NotificationDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  notificationId String @db.Uuid
+  channel String
+  recipient String
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  notification Notification @relation(fields: [organizationId, notificationId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([notificationId, channel, recipient])
+  @@index([status, nextAttemptAt])
+}
+
+model SourceSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  monitorId String @db.Uuid
+  monitorRunId String @unique @db.Uuid
+  url String
+  contentHash String
+  text String
+  retrievedAt DateTime @default(now())
+  monitor Monitor @relation(fields: [organizationId, monitorId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, monitorId, retrievedAt])
+}
+
+model BillingCheckout {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  provider String
+  planId String
+  interval String
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([organizationId, createdAt])
+}
+
+model Feature {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  normalizedName String
+  createdAt DateTime @default(now())
+  competitors CompetitorFeature[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, id])
+  @@unique([organizationId, normalizedName])
+}
+
+model CompetitorFeature {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  competitorId String @db.Uuid
+  featureId String @db.Uuid
+  sourceId String @db.Uuid
+  quotation String
+  observedAt DateTime @default(now())
+  competitor Competitor @relation(fields: [organizationId, competitorId], references: [organizationId, id], onDelete: Cascade)
+  feature Feature @relation(fields: [organizationId, featureId], references: [organizationId, id], onDelete: Cascade)
+  source Source @relation(fields: [organizationId, sourceId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, competitorId, featureId])
+}
+
+model PricingHistory {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  pricingPlanId String @db.Uuid
+  amount Decimal? @db.Decimal(12, 2)
+  currency String?
+  interval String?
+  sourceUrl String
+  retrievedAt DateTime @default(now())
+  plan PricingPlan @relation(fields: [organizationId, pricingPlanId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, pricingPlanId, retrievedAt])
+}
+
+model SwotItem {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  findingId String @db.Uuid
+  category String
+  finding Finding @relation(fields: [organizationId, findingId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, findingId])
+}
+
+model MarketOpportunity {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  findingId String @db.Uuid
+  finding Finding @relation(fields: [organizationId, findingId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, findingId])
+}
+
+model Comparison {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  name String
+  competitorIds String[] @db.Uuid
+  createdAt DateTime @default(now())
+  @@index([organizationId, projectId])
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+}
+
+model CreditPack {
+  id String @id
+  name String
+  credits Int
+  amountCents Int
+  currency String @default("usd")
+  stripePriceId String? @unique
+  enabled Boolean @default(true)
+  purchases CreditPurchase[]
+}
+model CreditPurchase {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  packId String
+  credits Int
+  amountCents Int
+  currency String
+  provider String
+  providerSessionId String? @unique
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  pack CreditPack @relation(fields: [packId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@index([organizationId, createdAt])
+}
+model Invoice {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  providerId String @unique
+  number String?
+  status String
+  currency String
+  amountPaid Int
+  hostedInvoiceUrl String?
+  issuedAt DateTime
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@index([organizationId, issuedAt])
+}
+
+model ReportExport {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  reportId String @db.Uuid
+  actorId String @db.Uuid
+  format String
+  bytes Int
+  contentHash String
+  createdAt DateTime @default(now())
+  report Report @relation(fields: [organizationId, reportId], references: [organizationId, id], onDelete: Cascade)
+  @@index([organizationId, reportId, createdAt])
+}
+
+model Permission {
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique
+  description String
+  roles RolePermission[]
+}
+model RolePermission {
+  id String @id @default(uuid()) @db.Uuid
+  role Role
+  permissionId String @db.Uuid
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@unique([role, permissionId])
+}
+model Entitlement {
+  id String @id @default(uuid()) @db.Uuid
+  planId String
+  key String
+  value Int
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  @@unique([planId, key])
+}
+model UsageEvent {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  ledgerId String @unique @db.Uuid
+  category String
+  units Int
+  referenceId String?
+  createdAt DateTime @default(now())
+  ledger CreditLedger @relation(fields: [organizationId, ledgerId], references: [organizationId, id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@unique([organizationId, ledgerId])
+  @@index([organizationId, createdAt])
+}
+model Metric {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  period DateTime @db.Date
+  value Decimal @db.Decimal(20, 6)
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@unique([organizationId, name, period])
+}
+model ProjectCompetitor {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String @db.Uuid
+  competitorId String @db.Uuid
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [organizationId, competitorId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, projectId, competitorId])
+}
+model AlertRule {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  monitorId String @db.Uuid
+  name String
+  phrase String
+  condition String
+  severity String @default("INFO")
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  monitor Monitor @relation(fields: [organizationId, monitorId], references: [organizationId, id], onDelete: Cascade)
+  alerts Alert[]
+  @@unique([organizationId, id])
+  @@index([organizationId, monitorId])
+}
+model Alert {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  ruleId String @db.Uuid
+  changeId String @db.Uuid
+  severity String
+  createdAt DateTime @default(now())
+  rule AlertRule @relation(fields: [organizationId, ruleId], references: [organizationId, id], onDelete: Cascade)
+  change ChangeEvent @relation(fields: [organizationId, changeId], references: [organizationId, id], onDelete: Cascade)
+  @@unique([organizationId, ruleId, changeId])
+  @@index([organizationId, createdAt])
+}
