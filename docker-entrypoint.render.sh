@@ -24,9 +24,8 @@ fi
 PG_BIN="$(ls -d /usr/lib/postgresql/*/bin | head -n1)"
 export PATH="$PG_BIN:$PATH"
 
-mkdir -p "$PGDATA" /var/run/postgresql /var/run/redis /var/lib/redis
+mkdir -p "$PGDATA" /var/run/postgresql /tmp/redis
 chown -R postgres:postgres "$PGDATA" /var/run/postgresql
-chown -R redis:redis /var/lib/redis /var/run/redis 2>/dev/null || true
 
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   echo "[entrypoint] Initializing Postgres in $PGDATA"
@@ -56,7 +55,19 @@ su -s /bin/bash postgres -c "$PG_BIN/postgres -D '$PGDATA'" &
 PG_PID=$!
 
 echo "[entrypoint] Starting Redis"
-redis-server --daemonize yes --bind 127.0.0.1 --port 6379 --dir /var/lib/redis --save "" --appendonly no
+# Foreground binary backgrounded as root into /tmp (daemonize+system dirs fail on slim images)
+redis-server \
+  --bind 127.0.0.1 \
+  --port 6379 \
+  --dir /tmp/redis \
+  --dbfilename dump.rdb \
+  --save "" \
+  --appendonly no \
+  --protected-mode no \
+  --daemonize no \
+  --logfile /tmp/redis/redis.log \
+  >/tmp/redis/stdout.log 2>&1 &
+REDIS_PID=$!
 
 echo "[entrypoint] Starting Mailpit (local SMTP)"
 mailpit --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025 >/tmp/mailpit.log 2>&1 &
@@ -65,7 +76,7 @@ MAIL_PID=$!
 cleanup() {
   echo "[entrypoint] Shutting down"
   kill -TERM "$MAIL_PID" 2>/dev/null || true
-  redis-cli shutdown nosave 2>/dev/null || true
+  kill -TERM "$REDIS_PID" 2>/dev/null || true
   kill -TERM "$PG_PID" 2>/dev/null || true
   wait "$PG_PID" 2>/dev/null || true
 }
@@ -79,6 +90,20 @@ for i in $(seq 1 90); do
   sleep 1
   if [ "$i" -eq 90 ]; then
     echo "[entrypoint] Postgres failed to become ready" >&2
+    exit 1
+  fi
+done
+
+echo "[entrypoint] Waiting for Redis"
+for i in $(seq 1 30); do
+  if redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG; then
+    echo "[entrypoint] Redis is up"
+    break
+  fi
+  sleep 1
+  if [ "$i" -eq 30 ]; then
+    echo "[entrypoint] Redis failed to become ready" >&2
+    cat /tmp/redis/redis.log /tmp/redis/stdout.log 2>/dev/null || true
     exit 1
   fi
 done
