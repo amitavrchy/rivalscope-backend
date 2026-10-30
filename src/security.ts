@@ -4,7 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { ZodError } from 'zod';
 import { Database } from './database.js';
-import { env } from './config.js';
+import { env, allowedOrigins } from './config.js';
 import { captureSanitizedError } from './instrumentation.js';
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -13,9 +13,12 @@ export const SESSION_COOKIE = 'rs_session';
 export type ActorRequest = Request & { actor: { id: string; email: string; verified: boolean; platformAdmin: boolean }; sessionId: string };
 export const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: env.NODE_ENV === 'production', path: '/' };
 
+const allowedOriginSet = allowedOrigins();
+
 export function originProtection(req: Request, res: Response, next: NextFunction) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.path === '/api/billing/webhook') return next();
-  if (req.headers.origin !== new URL(env.APP_ORIGIN).origin) return res.status(403).json({ message: 'Request origin is not allowed' });
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+  if (!origin || !allowedOriginSet.has(origin)) return res.status(403).json({ message: 'Request origin is not allowed' });
   if (!req.is('application/json')) return res.status(415).json({ message: 'Use application/json' });
   next();
 }

@@ -6,6 +6,8 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   APP_ORIGIN: z.url().default('http://localhost:3000'),
+  // Comma-separated extra browser origins allowed for CSRF Origin checks (e.g. Netlify + API host).
+  ALLOWED_ORIGINS: optional,
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
@@ -42,6 +44,22 @@ if (env.NODE_ENV === 'production') {
   if (!env.ENCRYPTION_KEY || !/^[a-f\d]{64}$/i.test(env.ENCRYPTION_KEY)) throw new Error('ENCRYPTION_KEY must be 32 random bytes encoded as hex');
 }
 
+
+/** Browser origins accepted by originProtection (APP_ORIGIN + ALLOWED_ORIGINS; localhost in non-production). */
+export function allowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  origins.add(new URL(env.APP_ORIGIN).origin);
+  for (const part of (env.ALLOWED_ORIGINS ?? '').split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    try { origins.add(new URL(trimmed).origin); } catch { /* ignore invalid entries */ }
+  }
+  if (env.NODE_ENV !== 'production') {
+    origins.add('http://localhost:3000');
+    origins.add('http://127.0.0.1:3000');
+  }
+  return origins;
+}
 export function redisConnection() {
   const url = new URL(env.REDIS_URL);
   return { host: url.hostname, port: Number(url.port || 6379), username: url.username || undefined,

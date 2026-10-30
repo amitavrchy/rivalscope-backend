@@ -64,7 +64,8 @@ ENV NODE_ENV=production \
     MAIL_FROM="RivalScope <noreply@rivalscope.local>" \
     BILLING_PROVIDER=stripe \
     EMBEDDINGS_ENABLED=false \
-    APP_ORIGIN=https://rivalscope.netlify.app
+    APP_ORIGIN=https://rivalscope-132.netlify.app \
+    ALLOWED_ORIGINS=https://rivalscope-132.netlify.app,https://rivalscope-api.onrender.com
 
 EXPOSE 4000
 
