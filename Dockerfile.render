@@ -1,0 +1,71 @@
+# RivalScope API + worker + Postgres(pgvector) + Redis + Mailpit (single free Render web service).
+# Ephemeral disk: migrate + plan seed on every boot.
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    openssl \
+    postgresql \
+    postgresql-contrib \
+    postgresql-server-dev-all \
+    build-essential \
+    git \
+    redis-server \
+    fonts-noto-core \
+    procps \
+  && rm -rf /var/lib/apt/lists/* \
+  && git clone --depth 1 --branch v0.8.0 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+  && make -C /tmp/pgvector \
+  && make -C /tmp/pgvector install \
+  && rm -rf /tmp/pgvector \
+  && curl -fsSL -o /tmp/mailpit.tgz \
+      "https://github.com/axllent/mailpit/releases/download/v1.27.1/mailpit-linux-amd64.tar.gz" \
+  && tar -xzf /tmp/mailpit.tgz -C /usr/local/bin mailpit \
+  && chmod +x /usr/local/bin/mailpit \
+  && rm -f /tmp/mailpit.tgz
+
+WORKDIR /app
+
+ENV DATABASE_URL=postgresql://rivalscope:rivalscope@127.0.0.1:5432/rivalscope \
+    REDIS_URL=redis://127.0.0.1:6379 \
+    SMTP_URL=smtp://127.0.0.1:1025
+
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+
+RUN npm install --no-audit --no-fund
+
+COPY src ./src
+COPY tsconfig.json tsconfig.build.json nest-cli.json ./
+COPY assets ./assets
+COPY scripts ./scripts
+COPY docker-entrypoint.render.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build npx prisma generate \
+  && npm run build \
+  && npm install prisma tsx --no-save --no-audit --no-fund \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /var/lib/postgresql/data /var/run/postgresql /var/run/redis \
+  && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=4000 \
+    PGDATA=/var/lib/postgresql/data \
+    POSTGRES_USER=rivalscope \
+    POSTGRES_PASSWORD=rivalscope \
+    POSTGRES_DB=rivalscope \
+    DATABASE_URL=postgresql://rivalscope:rivalscope@127.0.0.1:5432/rivalscope \
+    REDIS_URL=redis://127.0.0.1:6379 \
+    SMTP_URL=smtp://127.0.0.1:1025 \
+    MAIL_FROM="RivalScope <noreply@rivalscope.local>" \
+    BILLING_PROVIDER=stripe \
+    EMBEDDINGS_ENABLED=false \
+    APP_ORIGIN=https://rivalscope.netlify.app
+
+EXPOSE 4000
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
