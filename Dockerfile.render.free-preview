@@ -1,0 +1,35 @@
+# Disposable preview only. Existing Dockerfile/Dockerfile.render remain external-store targets.
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=256
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+RUN npm ci --no-fund --no-audit
+COPY . .
+RUN sed -i 's/\r$//' scripts/*.free-preview.sh && bash -n scripts/entrypoint.free-preview.sh && bash -n scripts/initialize.free-preview.sh
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run db:generate && node scripts/build.free-preview.mjs
+
+FROM node:24-bookworm-slim AS vector-build
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-server-dev-15 build-essential git ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v0.8.2 https://github.com/pgvector/pgvector.git /tmp/vector && make -C /tmp/vector OPTFLAGS="" && make -C /tmp/vector install
+
+FROM node:24-bookworm-slim
+RUN mkdir -p /etc/postgresql-common && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.conf \
+ && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold --no-install-recommends postgresql-15 redis-server util-linux openssl ca-certificates fonts-noto-core \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /preview/postgres /preview/redis /preview/run && chown -R node:node /preview
+ENV NODE_ENV=production PORT=4000 PATH=/usr/lib/postgresql/15/bin:$PATH NODE_OPTIONS="--max-old-space-size=96 --max-semi-space-size=4" UV_THREADPOOL_SIZE=2
+WORKDIR /app
+COPY --from=vector-build /usr/lib/postgresql/15/lib/vector.so /usr/lib/postgresql/15/lib/vector.so
+COPY --from=vector-build /usr/share/postgresql/15/extension/vector* /usr/share/postgresql/15/extension/
+COPY --from=build --chown=node:node /app/package*.json ./
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/prisma ./prisma
+COPY --from=build --chown=node:node /app/prisma.config.ts ./
+COPY --from=build --chown=node:node /app/scripts ./scripts
+COPY --from=build --chown=node:node /app/assets ./assets
+USER node
+EXPOSE 4000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=180s CMD node --max-old-space-size=24 scripts/free-preview-health.mjs
+ENTRYPOINT ["bash", "/app/scripts/entrypoint.free-preview.sh"]
