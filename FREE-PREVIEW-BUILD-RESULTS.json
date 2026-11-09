@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "memory_limit_bytes": 536870912,
+  "memory_swap_limit_bytes": 536870912,
+  "builder_driver": "docker-container",
+  "build_steps_serialized": true,
+  "dockerfile": "Dockerfile.render.free-preview",
+  "build_context": ".",
+  "builder_memory_peak_bytes": 536875008,
+  "builder_events": {
+    "low": 0,
+    "high": 0,
+    "max": 6347,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "peak_scope": "Most recent shared builder lifetime; kernel peak accounting can transiently exceed memory.max by a page. Limits were verified with Docker inspect.",
+  "earlier_attempts": "RivalScope full-program compiler hit V8 heap OOM; final per-file preview emitter passed. Other stalled experimental builds were cancelled. Existing full source type checks ran separately."
+}

@@ -1,0 +1,75 @@
+{
+  "project": "rivalscope",
+  "image": "rivalscope-free-preview",
+  "tested_at_utc": "2026-11-09T07:36:14.167Z",
+  "memory_limit_bytes": 536870912,
+  "memory_swap_limit_bytes": 536870912,
+  "cpus": 1,
+  "memory_observations": [
+    {
+      "phase": "cold-boot-ready",
+      "current_bytes": 367292416,
+      "peak_bytes": 404877312,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "phase": "authenticated-writes-and-worker",
+      "current_bytes": 350916608,
+      "peak_bytes": 536870912,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 162,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "phase": "restart-reseed",
+      "current_bytes": 300154880,
+      "peak_bytes": 487284736,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "phase": "fresh-replacement",
+      "current_bytes": 327553024,
+      "peak_bytes": 536870912,
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 233,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    }
+  ],
+  "checks": [
+    "fresh migrations/seeds, private stores, real authenticated writes, fail-closed security and worker",
+    "same-container restart/reseed preserves IDs, business edits and password hashes",
+    "clean SIGTERM exit 0",
+    "replacement without volumes creates fresh synthetic data and private login",
+    "unexpected required child failure stops siblings and exits 1"
+  ],
+  "image_id": "sha256:6ec0a95acc545421cdf01bcb7aea764b0184df3833dd9b1c4471a413df39c06a",
+  "cold_boot_seconds": 15.3,
+  "same_container_restart_seconds": 11.8,
+  "replacement_boot_seconds": 15.7,
+  "status": "passed",
+  "peak_observed_bytes": 536870912
+}

@@ -2,6 +2,8 @@
 
 Tenant-scoped competitor research built with NestJS, Prisma/PostgreSQL with pgvector, and Redis/BullMQ. The HTTP API and background worker run separately. Research uses retrieved public evidence; private organization/project data requires authorization.
 
+For the newly authorized disposable all-in-one Render Free target, use [FREE-PREVIEW.md](FREE-PREVIEW.md). The external-store production targets remain available.
+
 Start with [deployment and environment names](DEPLOYMENT.md), [synthetic seed provenance](SEED-DATA.md), and [verification results](VERIFICATION.md). Historical hosting addresses were removed because ownership and live deployment were not verified for the current accounts.
 
 ## Local setup

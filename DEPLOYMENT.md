@@ -1,5 +1,7 @@
 # RivalScope deployment runbook
 
+For the separately authorized disposable one-container Free preview, follow [FREE-PREVIEW.md](FREE-PREVIEW.md). This guide continues to describe the preserved external-store production target.
+
 Prepared locally on 2026-11-09. No public deployment or resource provisioning was performed. Historical hosting links are not ownership verification. Render workspace **Heyhoo** is approved; service plans, regions, persistent databases and Redis still need explicit approval and credentials.
 
 ## Required topology and approval gate
