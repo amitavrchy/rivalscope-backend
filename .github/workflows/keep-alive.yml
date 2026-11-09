@@ -1,17 +1,18 @@
 name: Keep Render Awake
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping RivalScope API health
+        env:
+          HEALTH_URL: ${{ vars.RENDER_HEALTH_URL }}
         run: |
-          URL="${{ vars.RENDER_HEALTH_URL }}"
+          URL="$HEALTH_URL"
           if [ -z "$URL" ]; then
-            URL="https://rivalscope-api.onrender.com/api/health"
+            echo "Set RENDER_HEALTH_URL to an ownership-verified endpoint"
+            exit 1
           fi
           echo "Pinging $URL"
           for i in 1 2 3 4 5; do

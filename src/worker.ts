@@ -27,9 +27,10 @@ const maintenance = async () => {
   catch { process.stderr.write(JSON.stringify({ level: 'error', event: 'worker_maintenance_failed' }) + '\n'); }
   finally { busy = false; }
 };
-const timer = setInterval(() => void maintenance(), 10_000);
+let inFlight: Promise<void> | undefined;
+const timer = setInterval(() => { if (!busy) inFlight = maintenance(); }, 10_000);
 const heartbeat = setInterval(() => { void app.get(RedisStore).client.set('rs:worker:heartbeat', new Date().toISOString(), 'EX', 30).catch(() => undefined); }, 5000);
-await maintenance();
+inFlight = maintenance(); await inFlight;
 let closing = false;
-const shutdown = async () => { if (closing) return; closing = true; clearInterval(timer); clearInterval(heartbeat); await Promise.all([researchWorker.close(), monitorWorker.close()]); await app.close(); };
+const shutdown = async () => { if (closing) return; closing = true; clearInterval(timer); clearInterval(heartbeat); await Promise.all([researchWorker.close(), monitorWorker.close(), inFlight]); await app.close(); };
 process.on('SIGTERM', () => void shutdown()); process.on('SIGINT', () => void shutdown());
