@@ -34,6 +34,14 @@ describe('real PostgreSQL API boundaries', () => {
   });
   afterAll(async () => { if (app) await app.close(); });
   it('serves health and denies anonymous access', async () => { await request(app.getHttpServer()).get('/api/health/ready').expect(200); await request(app.getHttpServer()).get('/api/auth/me').expect(401); });
+  it('prevents API caching, restricts CORS and requires an Origin for writes', async () => {
+    const me = await request(app.getHttpServer()).get('/api/auth/me').set('Cookie', cookieA).set('Origin', env.APP_ORIGIN).expect(200);
+    expect(me.headers['cache-control']).toBe('private, no-store');
+    expect(me.headers['access-control-allow-origin']).toBe(env.APP_ORIGIN);
+    const denied = await request(app.getHttpServer()).get('/api/health').set('Origin', 'https://untrusted.invalid').expect(200);
+    expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+    await request(app.getHttpServer()).post('/api/auth/logout').set('Cookie', cookieA).send({}).expect(403);
+  });
   it('never stores raw passwords or sessions', async () => { const user = await db.user.findUniqueOrThrow({ where: { id: userA } }); expect(user.passwordHash).toMatch(/^\$argon2/); const session = await db.session.findFirstOrThrow({ where: { userId: userA } }); expect(session.tokenHash).not.toBe(cookieA.split('=')[1]); });
   it('blocks cross-workspace reads and ID substitution', async () => {
     await request(app.getHttpServer()).get(`/api/organizations/${orgA}/projects`).set('Cookie', cookieB).expect(403);

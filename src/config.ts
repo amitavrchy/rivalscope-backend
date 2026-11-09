@@ -40,6 +40,10 @@ export const env = schema.parse(process.env);
 if (env.NODE_ENV === 'production') {
   if (env.BILLING_PROVIDER === 'mock') throw new Error('Mock billing is forbidden in production');
   if (new URL(env.APP_ORIGIN).protocol !== 'https:') throw new Error('Production APP_ORIGIN must use HTTPS');
+  for (const origin of [env.APP_ORIGIN, ...(env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean)]) {
+    const url = new URL(origin.trim());
+    if (url.protocol !== 'https:' || url.origin !== origin.trim()) throw new Error('Production origins must be exact HTTPS origins');
+  }
   if (!env.SMTP_URL) throw new Error('Production SMTP_URL is required for account verification');
   if (!env.ENCRYPTION_KEY || !/^[a-f\d]{64}$/i.test(env.ENCRYPTION_KEY)) throw new Error('ENCRYPTION_KEY must be 32 random bytes encoded as hex');
 }
