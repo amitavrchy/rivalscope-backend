@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "nest build",
-    "deploy": "docker compose -f ../docker-compose.production.yml up -d --build",
+    "deploy": "node -e \"console.error('Use DEPLOYMENT.md; deployment requires approval of the exact hosting plan.');process.exit(1)\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -25,10 +25,12 @@
     "worker": "node dist/worker.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "node --import tsx prisma/seed.ts",
+    "db:seed": "node scripts/seed.mjs",
     "check:provider": "node scripts/check-provider.mjs",
     "db:backup": "node scripts/backup.mjs",
-    "db:restore-check": "node scripts/restore-check.mjs"
+    "db:restore-check": "node scripts/restore-check.mjs",
+    "db:seed:demo": "node scripts/seed.mjs --demo",
+    "db:seed:verify": "node scripts/verify-seed.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",
@@ -100,5 +102,10 @@
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.2"
+  },
+  "overrides": {
+    "gaxios": {
+      "rimraf": "^6.1.4"
+    }
   }
 }
