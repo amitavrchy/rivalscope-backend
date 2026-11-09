@@ -1,5 +1,5 @@
 import { planLimit } from './entitlements.js';
-import { Body, Controller, Get, Inject, Injectable, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Injectable, Post, Req, Res, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
@@ -21,6 +21,7 @@ export class AuthService {
   constructor(@Inject(Database) private readonly db: Database, @Inject(MailService) private readonly mail: MailService, @Inject(AccountSecurityService) private readonly security: AccountSecurityService) {}
   async register(input: unknown) {
     const data = registerSchema.parse(input);
+    if (env.FREE_PREVIEW === 'true' && !env.SMTP_URL) throw new ServiceUnavailableException('Email delivery is unavailable in this preview. Use the privately configured preview account.');
     const passwordHash = await argon2.hash(data.password, { type: argon2.argon2id });
     const token = newToken();
     const user = await this.db.$transaction(async tx => {

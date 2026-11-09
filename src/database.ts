@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 @Injectable()
 export class Database extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() { super({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }) }); }
+  constructor() { super({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL, ...(env.FREE_PREVIEW === 'true' ? { max: 4 } : {}) }) }); }
   async onModuleInit() { await this.$connect(); }
   async onModuleDestroy() { await this.$disconnect(); }
   async tenantRead<T>(organizationId: string, operation: (tx: Prisma.TransactionClient) => Promise<T>) {

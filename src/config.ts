@@ -4,6 +4,7 @@ import { z } from 'zod';
 const optional = z.preprocess(v => v === '' ? undefined : v, z.string().optional());
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  FREE_PREVIEW: z.enum(['true', 'false']).default('false'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   APP_ORIGIN: z.url().default('http://localhost:3000'),
   // Comma-separated extra browser origins allowed for CSRF Origin checks (e.g. Netlify + API host).
@@ -44,7 +45,8 @@ if (env.NODE_ENV === 'production') {
     const url = new URL(origin.trim());
     if (url.protocol !== 'https:' || url.origin !== origin.trim()) throw new Error('Production origins must be exact HTTPS origins');
   }
-  if (!env.SMTP_URL) throw new Error('Production SMTP_URL is required for account verification');
+  if (env.FREE_PREVIEW === 'true' && process.env.ALLOW_PRODUCTION_SEED !== 'true') throw new Error('Free preview requires explicit production-seed approval');
+  if (!env.SMTP_URL && env.FREE_PREVIEW !== 'true') throw new Error('Production SMTP_URL is required for account verification');
   if (!env.ENCRYPTION_KEY || !/^[a-f\d]{64}$/i.test(env.ENCRYPTION_KEY)) throw new Error('ENCRYPTION_KEY must be 32 random bytes encoded as hex');
 }
 

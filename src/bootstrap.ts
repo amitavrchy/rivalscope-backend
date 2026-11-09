@@ -6,12 +6,14 @@ import type { Request } from 'express';
 import { ApiExceptionFilter, originProtection } from './security.js';
 import { env, allowedOrigins } from './config.js';
 import { MetricsService } from './observability.js';
+import { previewAuthAdmission } from './preview-admission.js';
 
 export function configureApp(app: INestApplication) {
   app.setGlobalPrefix('api');
   if (env.NODE_ENV === 'production') app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.use(helmet());
   app.use(cookieParser());
+  if (env.FREE_PREVIEW === 'true') app.use(previewAuthAdmission());
   app.enableCors({ origin: [...allowedOrigins()], credentials: true });
   app.use((_req: Request, res: import('express').Response, next: import('express').NextFunction) => {
     res.setHeader('Cache-Control', 'private, no-store');
